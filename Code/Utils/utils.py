@@ -1,11 +1,6 @@
-# import logging
-# import os
-# import sys
-# import torch
-# import numpy as np
-# import argparse
-# import re
-
+import os
+import numpy as np
+import argparse
 from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertSelfOutput, BertIntermediate, BertOutput
 
@@ -32,7 +27,7 @@ def initialize_tokenizer(args):
     return tokenizer
 
 
-def initialize_model(args, word_dict, category_dict, subcategory_dict):
+def initialize_model(args, word_dict, category_dict, subcategory_dict, user_id_dict):
     """
     Function for initializing the correct model.
     Inputs:
@@ -40,6 +35,7 @@ def initialize_model(args, word_dict, category_dict, subcategory_dict):
         word_dict - Dictionary of words contained in the news articles
         category_dict - Dictionary of article categories
         subcategory_dict - Dictionary of article subcategories
+        user_id_dict - Dictionary of user ids
     Outputs:
         model - Initialized model
     """
@@ -62,6 +58,12 @@ def initialize_model(args, word_dict, category_dict, subcategory_dict):
       embedding_matrix = load_matrix(matrix_dir, word_dict, 300)
       # Load the naml model
       model = NAMLModel(args, embedding_matrix, len(category_dict), len(subcategory_dict))
+    elif args.architecture == 'lstur':
+      # Load the glove embeddings
+      matrix_dir = download_matrix(args)
+      embedding_matrix = load_matrix(matrix_dir, word_dict, 300)
+      # Load the lstur model
+      model = LSTURModel(args, embedding_matrix, len(category_dict), len(subcategory_dict), len(user_id_dict))
     elif args.architecture == 'plm4newsrec':
       # Load the encoder model
       if args.news_encoder_model == 'fastformer':
@@ -226,7 +228,7 @@ def download_matrix(args):
     """
     
     url_dict = {
-      'MIND': ('https://nlp.stanford.edu/data/glove.840B.300d.zip', 'glove.840B.300d.txt'),
+      'MIND': ('https://huggingface.co/stanfordnlp/glove/resolve/main/glove.840B.300d.zip', 'glove.840B.300d.txt'),
       'RTL_NR': ('https://dl.fbaipublicfiles.com/fasttext/vectors-crawl/cc.nl.300.vec.gz', 'embeddings.vec'),
     }
     

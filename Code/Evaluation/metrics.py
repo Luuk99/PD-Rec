@@ -1,8 +1,8 @@
-# from sklearn.metrics import roc_auc_score
-# import numpy as np
-# import torch
+import numpy as np
+import torch
 from sklearn.metrics.pairwise import cosine_similarity
 import math
+
 
 def acc(y_true, y_hat):
     """

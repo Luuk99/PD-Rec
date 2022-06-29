@@ -1,5 +1,3 @@
-import torch
-import torch.nn.functional as F
 from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
 import numpy as np
 from scipy.special import softmax
@@ -31,16 +29,21 @@ def rank_recommendations(scores, labels, embeddings, news_ids):
     return scores, labels, embeddings, news_ids
 
 
-def diversity_reranking(history_news_vecs, history_log_mask, candidate_news_vecs, scores):
+def diversity_reranking(args, history_news_vecs, history_log_mask, candidate_news_vecs, scores):
     """
     Function for calculating a diversified score.
     Inputs:
+        args - Parsed arguments
         history_news_vecs - History news embeddings
         history_log_mask - History log mask
         candidate_news_vecs - Candidate news embeddings
         scores - Relevancy scores
     Outputs:
         diverse_scores - Diversified scores
+
+        diversified_scores -  Diversified scrores
+        history_similarity - User's history similarity
+        candidate_diversity - Candidate articles' diversity
     """
     
     # Remove the masked vectors
@@ -52,37 +55,49 @@ def diversity_reranking(history_news_vecs, history_log_mask, candidate_news_vecs
       history_similarity = 0.5
     else:  
       # Calculate the history similarity
-      history_similarity_matrix = cosine_similarity(X=history_news_vecs)
-      history_similarity = (history_similarity_matrix + 1) / 2
-      upper_right = np.triu_indices(history_similarity_matrix.shape[0], k=1)
-      history_similarity = np.mean(history_similarity_matrix[upper_right])
-      
-      #history_similarity = euclidean_distances(history_news_vecs, history_news_vecs)
-      #upper_right = np.triu_indices(history_similarity.shape[0], k=1)
-      #history_similarity = 1 / (1 + history_similarity)
-      #history_similarity = np.mean(history_similarity[upper_right])
+      if args.similarity_measure == 'cosine_similarity':
+        history_similarity = cosine_similarity(X=history_news_vecs)
+        history_similarity = (history_similarity + 1) / 2
+      else:
+        history_similarity = euclidean_distances(history_news_vecs, history_news_vecs)
+        history_similarity = 1 / (1 + history_similarity)
+      upper_right = np.triu_indices(history_similarity.shape[0], k=1)
+      history_similarity = np.mean(history_similarity[upper_right])
     
     # Calculate the candidate diversities
-    candidate_diversity = (1 - cosine_similarity(X=candidate_news_vecs)) / 2
+    if args.similarity_measure == 'cosine_similarity':
+      candidate_diversity = (1 - cosine_similarity(X=candidate_news_vecs)) / 2
+    else:
+      candidate_diversity = euclidean_distances(candidate_news_vecs, candidate_news_vecs)
+      candidate_diversity = 1 - (1 / (1 + candidate_diversity))
     candidate_diversity = np.sum(candidate_diversity, axis=1) / (np.shape(candidate_diversity)[1] - 1)
-    #candidate_diversity = euclidean_distances(candidate_news_vecs, candidate_news_vecs)
-    #candidate_diversity = 1 - (1 / (1 + candidate_diversity))
-    #candidate_diversity = np.array(candidate_diversity).mean(axis=0)
     
     # Softmax the scores
     scores = softmax(scores)
     
+    # Override the history similarity score as diversity weight with a given fixed value
+    if args.fixed_s > 0.0:
+      diversity_weight = args.fixed_s
+    else:
+      diversity_weight = history_similarity
+    
     # Calculate the diverse scores
-    diversified_scores = (history_similarity * candidate_diversity) + ((1 - history_similarity) * scores)
+    if args.reranking_function == 'bound':
+      diversity_weight = np.minimum(np.maximum(diversity_weight, args.s_min), args.s_max)
+    elif args.reranking_function == 'normalized':
+      diversity_weight = (diversity_weight - args.s_min) / (args.s_max - args.s_min)
+      candidate_diversity = (candidate_diversity - args.d_min) / (args.d_max - args.d_min)
+    diversified_scores = (diversity_weight * candidate_diversity) + ((1 - diversity_weight) * scores) 
     
     # Return the diversified scores, history similarity and candidate diversity
     return diversified_scores, history_similarity, candidate_diversity
     
 
-def user_similarity(history_news_vecs, history_log_mask):
+def user_similarity(args, history_news_vecs, history_log_mask):
     """
     Function for calculating the user similarity.
     Inputs:
+        args - Parsed arguments
         history_news_vecs - History news embeddings
         history_log_mask - History log mask
     Outputs:
@@ -98,28 +113,14 @@ def user_similarity(history_news_vecs, history_log_mask):
       history_similarity = 0.5
     else:  
       # Calculate the history similarity
-      history_similarity = cosine_similarity(X=history_news_vecs)
+      if args.similarity_measure == 'cosine_similarity':
+        history_similarity = cosine_similarity(X=history_news_vecs)
+        history_similarity = (history_similarity + 1) / 2
+      else:
+        history_similarity = euclidean_distances(history_news_vecs, history_news_vecs)
+        history_similarity = 1 / (1 + history_similarity)
       upper_right = np.triu_indices(history_similarity.shape[0], k=1)
-      history_similarity = (history_similarity + 1) / 2
       history_similarity = np.mean(history_similarity[upper_right])
     
     # Return the history similarity
     return history_similarity
-  
-  
-def candidate_diversity(candidate_news_vecs):
-    """
-    Function for calculating diversity of the candidates.
-    Inputs:
-        candidate_news_vecs - Candidate news embeddings
-    Outputs:
-        candidate_div - Average diversity of the candidates (intra-list distance)
-    """
-    
-    # Calculate the candidate diversities
-    candidate_diversity = (1 - cosine_similarity(X=candidate_news_vecs)) / 2
-    upper_right = np.triu_indices(candidate_diversity.shape[0], k=1)
-    candidate_diversity = np.mean(candidate_diversity[upper_right])
-    
-    # Return the candidate diversity
-    return candidate_diversity

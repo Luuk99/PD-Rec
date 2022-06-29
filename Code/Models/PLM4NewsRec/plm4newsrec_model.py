@@ -1,9 +1,7 @@
-# import numpy as np
+import numpy as np
 import torch
 from torch import nn
 import torch.nn.functional as F
-# import os
-# import math
 
 
 class PLM4NewsRecAdditiveAttention(nn.Module):

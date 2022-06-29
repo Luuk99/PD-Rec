@@ -1,11 +1,6 @@
-# import os
-# import logging
-# import fnmatch
-# import random
-# import numpy as np
-# import tensorflow as tf
-
-# import utils
+import os
+import numpy as np
+import tensorflow as tf
 
 
 class StreamReader:

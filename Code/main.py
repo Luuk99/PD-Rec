@@ -1,3 +1,18 @@
+import time
+import datetime
+import numpy as npR
+import torch
+from sklearn.metrics import roc_auc_score
+from torch.cuda import amp
+import os
+import torch.optim as optim
+import pandas as pd
+
+from utils import initialize_tokenizer, initialize_model
+from parameters import parse_args
+from dataloading import load_data
+
+
 def perform_training_epoch(model, optimizer, scaler, dataloader, args):
     """
     Function for performing a single training epoch.
@@ -9,6 +24,7 @@ def perform_training_epoch(model, optimizer, scaler, dataloader, args):
     Outputs:
         loss - Average loss over the entire epoch
         accuracy - Average accuracy over the enitre epoch
+        elapsed_time - Execution time for a single training epoch
     """
     
     # Set model to training 
@@ -19,7 +35,7 @@ def perform_training_epoch(model, optimizer, scaler, dataloader, args):
     accuracy = 0.0
     start_time = time.time()
     epoch_time = time.time()
-    for cnt, (log_ids, log_mask, input_ids, targets) in enumerate(dataloader):
+    for cnt, (log_ids, log_mask, input_ids, targets, user_ids) in enumerate(dataloader):
       optimizer.zero_grad()
       
       if args.enable_gpu:
@@ -27,15 +43,23 @@ def perform_training_epoch(model, optimizer, scaler, dataloader, args):
         log_mask = log_mask.cuda(non_blocking=True)
         input_ids = input_ids.cuda(non_blocking=True)
         targets = targets.cuda(non_blocking=True)
+        user_ids = user_ids.cuda(non_blocking=True)
       
       # Pass through the model
       with amp.autocast():
-        bz_loss, y_hat = model(input_ids, log_ids, log_mask, targets)
+        if args.architecture == 'lstur':
+          bz_loss, y_hat = model(input_ids, log_ids, log_mask, user_ids, targets)
+        else:
+          bz_loss, y_hat = model(input_ids, log_ids, log_mask, targets)
       
       # Optimize the model
-      scaler.scale(bz_loss).backward()
-      scaler.step(optimizer)
-      scaler.update()
+      if args.enable_gpu:
+        scaler.scale(bz_loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
+      else:
+        bz_loss.backward()
+        optimizer.step()
       loss += bz_loss.data.float()
       accuracy += acc(targets, y_hat)
       
@@ -65,7 +89,8 @@ def perform_evaluation_epoch(model, tokenizer, word_dict, data_dir, args, catego
     Function for performing a single evaluation epoch.
     Inputs:
         model - Model to perform the training epoch on
-        tokenizer - News encoder tokenizer instance   
+        tokenizer - News encoder tokenizer instance
+        word_dict - Dictionary containing the words
         data_dir - Directory containing the data
         args - Parsed arguments
         category_dict - Dictionary containing the categories
@@ -103,7 +128,7 @@ def perform_evaluation_epoch(model, tokenizer, word_dict, data_dir, args, catego
     
     # Save the recommendataions, user similarity and candidate diversity if given
     if args.save_dev_results:
-      dev_results_dict = {'entry_id': [], 'top10_recommendations': [], 'user_sim': [], 'top10_div': []}
+      dev_results_dict = {'entry_id': [], 'top10_recommendations': [], 'user_sim': [], 'ild@10': [], 'ild@5': [], 'mrr': [], 'ndcg@10': []}
     
     # Load the evaluation data
     dataloader, num_articles = load_data(data_dir, args, tokenizer, dataset=dataset,
@@ -112,13 +137,18 @@ def perform_evaluation_epoch(model, tokenizer, word_dict, data_dir, args, catego
     
     # Iterate over the dataloader
     evaluation_time = time.time()
-    for cnt, (log_vecs, log_masks, news_vecs, news_bias, labels, news_ids, entry_ids, log_st_embeddings, candidate_st_embeddings) in enumerate(dataloader):
+    for cnt, (log_vecs, log_masks, news_vecs, news_bias, labels, news_ids, entry_ids, log_st_embeddings, candidate_st_embeddings, user_ids) in enumerate(dataloader):
         if args.enable_gpu:
             log_vecs = log_vecs.cuda(non_blocking=True)
             log_masks = log_masks.cuda(non_blocking=True)
+            user_ids = user_ids.cuda(non_blocking=True)
         
         # Encode the user embeddings
-        user_vecs = model.user_encoder(log_vecs, log_masks).to(torch.device("cpu")).detach().numpy()
+        if args.architecture == 'lstur':
+          users = model.user_embedding(user_ids.long())
+          user_vecs = model.user_encoder(users, log_vecs, log_masks).to(torch.device("cpu")).detach().numpy()
+        else:
+          user_vecs = model.user_encoder(log_vecs, log_masks).to(torch.device("cpu")).detach().numpy()
         log_vecs = log_vecs.to(torch.device("cpu")).detach().numpy()
         log_masks = log_masks.to(torch.device("cpu")).detach().numpy()
         
@@ -133,7 +163,7 @@ def perform_evaluation_epoch(model, tokenizer, word_dict, data_dir, args, catego
             
             # Check whether to diversify
             if args.diversify:
-              score, user_sim, candidate_div = diversity_reranking(log_st_embedding, log_mask, candidate_st_embedding, score)
+              score, user_sim, candidate_div = diversity_reranking(args, log_st_embedding, log_mask, candidate_st_embedding, score)
             
             # Rank the recommendations
             score, label, candidate_st_embedding, news_id = rank_recommendations(score, label, candidate_st_embedding, news_id)
@@ -165,9 +195,12 @@ def perform_evaluation_epoch(model, tokenizer, word_dict, data_dir, args, catego
             # Save the results if given
             if args.save_dev_results:
               dev_results_dict['entry_id'].append(entry_id)
-              dev_results_dict['top10_recommendations'].append(news_id[:10])
-              dev_results_dict['user_sim'].append(user_similarity(log_st_embedding, log_mask))
-              dev_results_dict['top10_div'].append(candidate_diversity(candidate_st_embedding[:10]))
+              dev_results_dict['top10_recommendations'].append(' '.join(news_id[:10]))
+              dev_results_dict['user_sim'].append(user_similarity(args, log_st_embedding, log_mask))
+              dev_results_dict['ild@10'].append(ild10)
+              dev_results_dict['ild@5'].append(ild5)
+              dev_results_dict['mrr'].append(mrr)
+              dev_results_dict['ndcg@10'].append(ndcg10)
     
     # Calculate the metrics
     AUC = np.array(AUC).mean()
@@ -219,10 +252,10 @@ def train(args, data_dir):
       tokenizer = None
     
     # Load the training data
-    train_dataloader, category_dict, subcategory_dict, word_dict = load_data(data_dir, args, tokenizer, dataset='train')
+    train_dataloader, category_dict, subcategory_dict, word_dict, user_id_dict = load_data(data_dir, args, tokenizer, dataset='train')
     
     # Load the recommender model
-    model = initialize_model(args, word_dict, category_dict, subcategory_dict)
+    model = initialize_model(args, word_dict, category_dict, subcategory_dict, user_id_dict)
     if args.enable_gpu:
         model = model.cuda()
     
@@ -297,11 +330,10 @@ def train(args, data_dir):
           best_AUC = AUC
           epochs_without_improvement = 0
         else:
+          epochs_without_improvement += 1
           if epochs_without_improvement == args.patience:
             print('Early stopping criteria reached')
             break
-          else:
-            epochs_without_improvement += 1
     
     # Training is finished
     print('Training finished')
@@ -360,6 +392,12 @@ def load_from_checkpoint(args):
     Function for loading a model from a checkpoint.
     Inputs:
         args - Parsed arguments
+    Outputs:
+        model - Loaded model
+        tokenizer - Tokenizer of the model
+        word_dict - Loaded word dictionary
+        category_dict - Loaded category dictionary
+        subcategory_dict - Loaded subcategory dictionary
     """
     
     # Load the checkpoint
@@ -392,7 +430,7 @@ def load_from_checkpoint(args):
     return model, tokenizer, word_dict, category_dict, subcategory_dict 
 
     
-def main(args, data_dir):
+def main(args):
     """
     Function for starting training and/or testing.
     Inputs:
@@ -401,14 +439,19 @@ def main(args, data_dir):
     
     if args.mode == 'train':
       # Train the model
-      _, _, _, _, _ = train(args=args, data_dir=data_dir)
+      _, _, _, _, _ = train(args=args, data_dir=args.root_data_dir)
     elif args.mode == 'train_test':
       # Train the model
-      model, tokenizer, word_dict, category_dict, subcategory_dict = train(args=args, data_dir=data_dir)
+      model, tokenizer, word_dict, category_dict, subcategory_dict = train(args=args, data_dir=args.root_data_dir)
       # Test the model
-      test(model, tokenizer, word_dict, category_dict, subcategory_dict, args=args, data_dir=data_dir)
+      test(model, tokenizer, word_dict, category_dict, subcategory_dict, args=args, data_dir=args.root_data_dir)
     else:
       # Load the model
       model, tokenizer, word_dict, category_dict, subcategory_dict = load_from_checkpoint(args)
       # Test the model
-      test(model, tokenizer, word_dict, category_dict, subcategory_dict, args=args, data_dir=data_dir)
+      test(model, tokenizer, word_dict, category_dict, subcategory_dict, args=args, data_dir=args.root_data_dir)
+
+
+if __name__ == "__main__":
+  args = parse_args()
+  main(args)

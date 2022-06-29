@@ -1,3 +1,11 @@
+import os
+import numpy as np
+import torch
+
+from dataloader import DataloaderTrain, DataLoaderTest
+from preprocess import read_news_data, read_news_data_PLM, get_doc_input, get_doc_input_PLM, read_news_data_sentencetransformer, read_user_ids
+
+
 def load_data(data_dir, args, tokenizer, dataset='train', category_dict=None, subcategory_dict=None,
               model=None, word_dict=None, baseline=False):
     """
@@ -12,6 +20,8 @@ def load_data(data_dir, args, tokenizer, dataset='train', category_dict=None, su
           None if loading training data
         subcategory_dict - Subcategory dictionary
           None if loading training data
+        word_dict - Word dictionary
+          None if loading training data
         model - Recommender model instance
           None if loading training data 
         baseline - Boolean indicating whether we are using random/diversity baselines
@@ -19,6 +29,8 @@ def load_data(data_dir, args, tokenizer, dataset='train', category_dict=None, su
         dataloader - Dataloader instance containing train or test data
         category_dict - Category dictionary
         subcategory_dict - Subcategory dictionary
+        word_dict - Word dictionary
+        user_id_dict - User id dictionary
     """
     
     # Select the right dataset and mode
@@ -73,6 +85,9 @@ def load_data(data_dir, args, tokenizer, dataset='train', category_dict=None, su
         x for x in
         news_features
         if x is not None], axis=1)
+    
+    # Read the user ids
+    user_id_dict = read_user_ids(os.path.join(data_dir, 'behaviors.tsv'), args)
           
     if dataset == 'train':
       # Initialize the dataloader
@@ -80,14 +95,15 @@ def load_data(data_dir, args, tokenizer, dataset='train', category_dict=None, su
           news_index=news_index,
           news_combined=news_combined,
           word_dict=None,
+          user_id_dict=user_id_dict,
           data_dir=data_dir,
           args=args,
           enable_prefetch=True,
           enable_shuffle=True,
       )
       
-      # Return the dataloader, category, subcategory, and word dictionaries
-      return dataloader, category_dict, subcategory_dict, word_dict
+      # Return the dataloader, category, subcategory, word, and user id dictionaries
+      return dataloader, category_dict, subcategory_dict, word_dict, user_id_dict
     else:
       if not baseline:
         # Convert the news articles to embeddings
@@ -114,10 +130,11 @@ def load_data(data_dir, args, tokenizer, dataset='train', category_dict=None, su
         news_scoring = []
         with torch.no_grad():
           for input_ids in tqdm(news_dataloader):
+            if args.enable_gpu:
               input_ids = input_ids.cuda()
-              news_vec = model.news_encoder(input_ids)
-              news_vec = news_vec.to(torch.device("cpu")).detach().numpy()
-              news_scoring.extend(news_vec)
+            news_vec = model.news_encoder(input_ids)
+            news_vec = news_vec.to(torch.device("cpu")).detach().numpy()
+            news_scoring.extend(news_vec)
 
         news_scoring = np.array(news_scoring)
       
@@ -132,6 +149,7 @@ def load_data(data_dir, args, tokenizer, dataset='train', category_dict=None, su
         news_scoring=news_scoring,
         st_embeddings=st_embeddings,
         word_dict=None,
+        user_id_dict=user_id_dict,
         news_bias_scoring= None,
         data_dir=data_dir,
         args=args,

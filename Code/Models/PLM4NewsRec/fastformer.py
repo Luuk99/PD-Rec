@@ -23,6 +23,8 @@ class FastformerAttentionPooling(nn.Module):
     def init_weights(self, module):
         """
         Function for initializing the weights
+        Inputs:
+            module - Module to initialize the weights of
         """
         
         if isinstance(module, nn.Linear):
@@ -90,6 +92,8 @@ class FastSelfAttention(nn.Module):
     def init_weights(self, module):
         """
         Function for initializing the weights
+        Inputs:
+            module - Module to initialize the weights of
         """
         
         if isinstance(module, nn.Linear):
@@ -243,7 +247,6 @@ class FastformerEncoder(nn.Module):
         self.config = config
         self.encoders = nn.ModuleList([FastformerLayer(config) for _ in range(config.num_hidden_layers)])
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        #self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # support multiple different poolers with shared bert encoder.
@@ -287,7 +290,7 @@ class FastformerEncoder(nn.Module):
         #attention_mask: batch_size, seq_len, emb_dim
 
         extended_attention_mask = attention_mask.unsqueeze(1)
-        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         batch_size, seq_length, emb_dim = input_embs.shape
@@ -296,26 +299,13 @@ class FastformerEncoder(nn.Module):
         position_embeddings = self.position_embeddings(position_ids)
 
         embeddings = input_embs + position_embeddings
-        
-        #embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
-        #print('Embeddings size:')
-        #print(embeddings.size())
-        #return embeddings
         all_hidden_states = [embeddings]
 
         for i, layer_module in enumerate(self.encoders):
             layer_outputs = layer_module(all_hidden_states[-1], extended_attention_mask)
             all_hidden_states.append(layer_outputs)
         return all_hidden_states[-1]
-        #print('Last hidden state size:')
-        #print(all_hidden_states[-1].size())
-        #assert len(self.poolers) > pooler_index
-        #output = self.poolers[pooler_index](all_hidden_states[-1], attention_mask)
-        #print('Pooler output size:')
-        #print(output.size())
-
-        #return output 
 
       
 class FastformerModel(torch.nn.Module):
@@ -344,6 +334,8 @@ class FastformerModel(torch.nn.Module):
     def init_weights(self, module):
         """
         Function for initializing the weights
+        Inputs:
+            module - Module to initialize the weights of
         """
         
         if isinstance(module, nn.Linear):

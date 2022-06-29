@@ -1,10 +1,8 @@
-# from six.moves.urllib.parse import urlparse
-# from collections import Counter
-# import tensorflow as tf
-# from tqdm import tqdm
-# import numpy as np
-# import re
-# from utils import word_tokenize
+from collections import Counter
+import tensorflow as tf
+from tqdm import tqdm
+import numpy as np
+from sentence_transformers import SentenceTransformer
 import nltk
 from nltk.tokenize import word_tokenize
 nltk.download('punkt')
@@ -38,6 +36,7 @@ def read_news_data(news_path, args, mode='train'):
         news_index - Index for the news ids to index
         category_dict - Category dictionary
         subcategory_dict - Subcategory dictionary
+        word_dict - Word dictionary
     """
     
     language_dict = {
@@ -102,11 +101,7 @@ def get_doc_input(news, news_index, category_dict, subcategory_dict, word_dict, 
         args - Parsed arguments
     Outputs:
         news_title - News title token ids
-        news_title_type - News title token type ids
-        news_title_attmask - News title attention mask
         news_abstract - News abstract token ids
-        news_abstract_type - News abstract token type ids
-        news_abstract_attmask - News abstract attention mask
         news_category - News category representation
         news_subcategory - News subcategory representation
     """
@@ -324,3 +319,26 @@ def read_news_data_sentencetransformer(news_path, args):
         # Return the news embeddings
         news = np.squeeze(np.array(news))
         return news
+
+
+def read_user_ids(behavior_path, args):
+    """
+    Function for reading the user ids from the behaviors.
+    Inputs:
+        behavior_path - Path to the news file
+        args - Parsed arguments
+    Outputs:
+        user_dict - User dictionary
+    """
+    
+    user_dict = {}
+    
+    # Loop over the files
+    with tf.io.gfile.GFile(behavior_path, "r") as f:
+        for line in tqdm(f):
+            splited = line.strip('\n').split('\t')
+            user_id = splited[2]
+            update_dict(user_dict, user_id)
+    
+    # Return the user dictionary
+    return user_dict

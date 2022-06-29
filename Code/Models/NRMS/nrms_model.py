@@ -216,7 +216,7 @@ class NRMSUserEncoder(nn.Module):
         Function for performing a forward pass on a batch.
         Inputs:
             news_vecs - Batch of historical news vectors (batch_size x history_num x news_dim)
-            mask - Batch of attention masks (batch_size x history_num)
+            log_mask - Batch of attention masks (batch_size x history_num)
         Outputs:
             user_vec - User vector representations (batch_size x news_dim)
         """

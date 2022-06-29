@@ -1,15 +1,15 @@
 import sys
 import traceback
 import logging
-import time
 import random
 from queue import Queue
 from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import torch
 from torch.utils.data import IterableDataset
-#from streaming import StreamSampler, StreamSamplerTest
-#import utils
+
+from streaming import StreamSampler, StreamSamplerTest
+import utils
 
 
 def news_sample(news, ratio):
@@ -34,15 +34,16 @@ class DataLoaderTrain(IterableDataset):
     Dataloader class for the training data.
     """
     
-    def __init__(self, data_dir, args, news_index, news_combined, word_dict, enable_prefetch=True, enable_shuffle=False):
+    def __init__(self, data_dir, args, news_index, news_combined, word_dict, user_id_dict, enable_prefetch=True, enable_shuffle=False):
         """
         Function for initializing the dataloader.
         Inputs:
             data_dir - Directory (folder) where the data is stored
             args - Parsed command line arguments
-            news_idx - Index for the combined news
+            news_index - Index for the combined news
             news_combined - Concatenated news features
             word_dict - Word dictionary
+            user_id_dict - User id dictionary
             enable_prefetch - Enable the pre-fetching of batches
             enable_shuffle - Shuffle the data among workers
         """
@@ -65,6 +66,7 @@ class DataLoaderTrain(IterableDataset):
         self.news_combined = news_combined
         self.news_index = news_index
         self.word_dict = word_dict
+        self.user_id_dict = user_id_dict
 
     def start(self):
         """
@@ -191,6 +193,7 @@ class DataLoaderTrain(IterableDataset):
             log_mask_batch - Batch of masks for the history logs
             news_feature_batch - Batch of canidate news articles
             label_batch - Batch of labels
+            user_id_batch - Batch of user ids
         """
         
         batch_size = len(batch)
@@ -198,12 +201,11 @@ class DataLoaderTrain(IterableDataset):
         batch_poss = [x.numpy().decode("utf-8") for x in batch_poss]
         batch = [x.numpy().decode("utf-8").split("\t") for x in batch]
         label = 0
-        user_feature_batch, log_mask_batch, news_feature_batch, label_batch = [], [], [], []
+        user_feature_batch, log_mask_batch, news_feature_batch, label_batch, user_id_batch = [], [], [], [], []
         
         # Iterate over all lines in the batch
         for poss, line in zip(batch_poss, batch):
             click_docs = line[3].split()
-            
 
             click_docs, log_mask = self.pad_to_fix_len(self.trans_to_nindex(click_docs),
                                              self.user_log_length)
@@ -223,6 +225,12 @@ class DataLoaderTrain(IterableDataset):
             else:
                 sam_negs = [0] * self.npratio
             sample_news = poss + sam_negs
+            
+            user_id = line[2]
+            if user_id in self.user_id_dict:
+              user_id_batch.append(self.user_id_dict[user_id])
+            else:
+              user_id_batch.append(0)
 
             news_feature = self.news_combined[sample_news]
             user_feature_batch.append(user_feature)
@@ -234,18 +242,21 @@ class DataLoaderTrain(IterableDataset):
         log_mask_batch = np.array(log_mask_batch)
         news_feature_batch = np.array(news_feature_batch)
         label_batch = np.array(label_batch)
+        user_id_batch = np.array(user_id_batch)
         if self.enable_gpu:
             user_feature_batch = torch.LongTensor(user_feature_batch).cuda()
             log_mask_batch = torch.FloatTensor(log_mask_batch).cuda()
             news_feature_batch = torch.LongTensor(news_feature_batch).cuda()
             label_batch = torch.LongTensor(label_batch).cuda()
+            user_id_batch = torch.FloatTensor(user_id_batch).cuda()
         else:
             user_feature_batch = torch.LongTensor(user_feature_batch)
             log_mask_batch = torch.FloatTensor(log_mask_batch)
             news_feature_batch = torch.LongTensor(news_feature_batch)
             label_batch = torch.LongTensor(label_batch)
+            user_id_batch = torch.FloatTensor(user_id_batch)
 
-        return user_feature_batch, log_mask_batch, news_feature_batch, label_batch
+        return user_feature_batch, log_mask_batch, news_feature_batch, label_batch, user_id_batch
       
     def __iter__(self):
         """
@@ -299,17 +310,18 @@ class DataLoaderTest(IterableDataset):
     Dataloader class for the test data.
     """
   
-    def __init__(self, data_dir, args, news_index, news_scoring, st_embeddings, word_dict, news_bias_scoring=None, enable_prefetch=True,
-                 enable_shuffle=False):
+    def __init__(self, data_dir, args, news_index, news_scoring, st_embeddings, word_dict, user_id_dict, news_bias_scoring=None,
+                 enable_prefetch=True, enable_shuffle=False):
         """
         Function for initializing the dataloader.
         Inputs:
             data_dir - Directory (folder) where the data is stored
             args - Parsed command line arguments
-            news_idx - Index for the combined news
+            news_index - Index for the combined news
             news_scoring - Embeddings of the news articles
             st_embeddings - Sentence transformer embeddings of the news articles
             word_dict - Word dictionary
+            user_id_dict - User id dictionary
             news_bias_scoring - Optional bias for certain news articles
             enable_prefetch - Enable the pre-fetching of batches
             enable_shuffle - Shuffle the data among workers
@@ -333,6 +345,7 @@ class DataLoaderTest(IterableDataset):
         self.news_bias_scoring = news_bias_scoring
         self.news_index = news_index
         self.word_dict = word_dict
+        self.user_id_dict = user_id_dict
 
     def start(self):
         """
@@ -461,6 +474,9 @@ class DataLoaderTest(IterableDataset):
             label_batch - Batch of labels
             id_batch - Batch of candidate news ids
             entry_id_batch - Batch of indices of the test set
+            user_st_embedding_batch - Batch of external embeddings in the user history
+            candidate_st_embedding_batch - Batch of external embeddings of the candidate articles
+            user_id_batch - Batch of user ids
         """
         
         batch_size = len(batch)
@@ -474,6 +490,7 @@ class DataLoaderTest(IterableDataset):
         label_batch = []
         id_batch = []
         entry_id_batch = []
+        user_id_batch = []
         user_st_embedding_batch = []
         candidate_st_embedding_batch = []
         
@@ -501,6 +518,12 @@ class DataLoaderTest(IterableDataset):
             
             candidate_st_embedding = self.st_embeddings[sample_news]
             candidate_st_embedding_batch.append(candidate_st_embedding)
+            
+            user_id = line[2]
+            if user_id in self.user_id_dict:
+              user_id_batch.append(self.user_id_dict[user_id])
+            else:
+              user_id_batch.append(0)
                 
             user_feature_batch.append(user_feature)
             log_mask_batch.append(log_mask)
@@ -512,14 +535,17 @@ class DataLoaderTest(IterableDataset):
         user_feature_batch = np.array(user_feature_batch)
         log_mask_batch = np.array(log_mask_batch)
         label_batch = np.array(label_batch)
+        user_id_batch = np.array(user_id_batch)
         if self.enable_gpu:
             user_feature_batch = torch.FloatTensor(user_feature_batch).cuda()
             log_mask_batch = torch.FloatTensor(log_mask_batch).cuda()
+            user_id_batch = torch.FloatTensor(user_id_batch).cuda()
         else:
             user_feature_batch = torch.FloatTensor(user_feature_batch)
             log_mask_batch = torch.FloatTensor(log_mask_batch)
+            user_id_batch = torch.FloatTensor(user_id_batch)
 
-        return user_feature_batch, log_mask_batch, news_feature_batch, news_bias_batch, label_batch, id_batch, entry_id_batch, user_st_embedding_batch, candidate_st_embedding_batch
+        return user_feature_batch, log_mask_batch, news_feature_batch, news_bias_batch, label_batch, id_batch, entry_id_batch, user_st_embedding_batch, candidate_st_embedding_batch, user_id_batch
     
     def __iter__(self):
         """
