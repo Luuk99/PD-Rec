@@ -2,13 +2,17 @@
 
 Master thesis for the master Artificial Intelligence @ UvA (University of Amsterdam)
 
-This repository contains research on diversity in personalized news recommendation. We research the effect of diversity in personalized news recommendation. Both in an online and offline setting. We use a novel re-ranking algorithm to introduce diversity to state-of-the-art news recommenders.
+This repository contains research on diversity in personalized news recommendation. We research the effect of personalized levels of diversity in personalized news recommendation. We use a novel re-ranking algorithm to introduce diversity to state-of-the-art news recommenders.
 
 ## Content
 
-This repository consists of the following scripts and folders:
+This repository consists of the following main scripts and folders:
 
-- **?**: ?.
+- **Hyperparameter Search**: this folder contains all the results from the hyperparameter search.
+- **Experimental Results**: this folder contains all the results from the experiments, ordered per experiment.
+- **Code**: this folder contains all the source code.
+- **Code/main.py**: this python file is the main file to call when running the experiments.
+- **Code/baselines.py**: this python file is the file to call when running the full diversity and random baselines.
 
 The accompanying thesis of this research can be found in this repository as **Thesis.pdf**.
 
@@ -25,7 +29,7 @@ Our re-split version of the MIND dataset can be found in [this Drive folder](htt
 1. Open Anaconda prompt and clone this repository (or download and unpack zip):
 
 ```bash
-git clone https://github.com/AndrewHarrison/ir2
+git clone https://github.com/Luuk99/MasterThesis.git
 ```
 
 2. Create the environment:
@@ -34,87 +38,91 @@ git clone https://github.com/AndrewHarrison/ir2
 conda env create -f environments/environment.yml
 ```
 
-Or use the Lisa environment when running on the SurfSara Lisa cluster:
-
-```bash
-conda env create -f environments/environment_lisa.yml
-```
-
 3. Activate the environment:
 
 ```bash
-conda activate ir2
+conda activate PDRec
 ```
 
 4. Move to the directory:
 
 ```bash
-cd ir2
+cd MasterThesis/Code
 ```
 
-5. Download the Natural Questions dataset:
+5. Download our MIND dataset split and unzip into a folder called MIND:
+
+6. Run the training function with default parameters:
 
 ```bash
-python data_download/download_nq_data.py --resource data.retriever.nq --output_dir data/
-```
-
-6. Run the training script for DPR with a BERT encoder:
-
-```bash
-python train_dpr.py
-```
-
-Or download one of our models from the Drive folder and evaluate:
-
-```bash
-python evaluate_dpr.py
+python main.py
 ```
 
 ## Arguments
 
-The DPR models can be trained using the following command line arguments:
+The models can be trained and evaluated using the following command line arguments:
 
 ```bash
-usage: train_dpr.py [-h] [--model MODEL] [--max_seq_length MAX_SEQ_LENGTH] [--embeddings_size EMBEDDINGS_SIZE]
-                        [--dont_embed_title] [--data_dir DATA_DIR] [--lr LR] [--warmup_steps WARMUP_STEPS]
-                        [--dropout DROPOUT] [--n_epochs N_EPOCHS] [--batch_size BATCH_SIZE] [--save_dir SAVE_DIR]
-                        [--seed SEED]
+usage: main.py [-h] [--mode MODE] [--dataset DATASET] [--root_data_dir ROOT_DATA_DIR] [--train_dir TRAIN_DIR]
+                    [--dev_dir DEV_DIR] [--test_dir TEST_DIR] [--model_dir MODEL_DIR] [--load_ckpt_name LOAD_CKPT_NAME]
+                    [--save_dev_results SAVE_DEV_RESULTS] [--seed SEED] [--epochs EPOCHS] [--optimizer OPTIMIZER] [--lr LR]
+                    [--batch_size BATCH_SIZE] [--npratio NPRATIO] [--enable_gpu ENABLE_GPU]
+                    [--shuffle_buffer_size SHUFFLE_BUFFER_SIZE] [--num_workers NUM_WORKERS] [--log_steps LOG_STEPS]
+                    [--patience PATIENCE] [--filter_num FILTER_NUM] [--architecture ARCHITECTURE]
+                    [--num_unfrozen_layers NUM_UNFROZEN_LAYERS] [--num_words_title NUM_WORDS_TITLE]
+                    [--num_words_abstract NUM_WORDS_ABSTRACT] [--user_log_length USER_LOG_LENGTH]
+                    [--news_encoder_model NEWS_ENCODER_MODEL] [--news_dim NEWS_DIM]
+                    [--news_query_vector_dim NEWS_QUERY_VECTOR_DIM] [--user_query_vector_dim USER_QUERY_VECTOR_DIM]
+                    [--num_attention_heads NUM_ATTENTION_HEADS] [--drop_rate DROP_RATE] [--do_lower_case DO_LOWER_CASE]
+                    [--diversify DIVERSIFY] [--similarity_measure SIMILARITY_MEASURE] [--reranking_function RERANKING_FUNCTION]
+                    [--s_min S_MIN] [--s_max S_MAX] [--d_min D_MIN] [--d_max D_MAX] [--fixed_s FIXED_S]
 
 optional arguments:
-  -h, --help                            Show help message and exit.
-  --model MODEL                         What encoder model to use. Options: ['bert', 'distilbert', 'electra', 'tinybert']. Default is 'bert'.
-  --max_seq_length MAX_SEQ_LENGTH       Maximum tokenized sequence length. Default is 256.
-  --embeddings_size EMBEDDINGS_SIZE     Size of the model embeddings. Default is 0 (standard model embeddings sizes).
-  --dont_embed_title                    Do not embed passage titles. Titles are embedded by default.
-  --data_dir DATA_DIR                   Directory where the data is stored. Default is data/downloads/data/retriever/.
-  --lr LR                               Learning rate to use during training. Default is 1e-5.
-  --warmup_steps WARMUP_STEPS           Number of warmup steps. Default is 100.
-  --dropout DROPOUT                     Dropout rate to use during training. Default is 0.1.
-  --n_epochs N_EPOCHS                   Number of epochs to train for. Default is 40.
-  --batch_size BATCH_SIZE               Training batch size. Default is 16.
-  --save_dir SAVE_DIR                   Directory for saving the models. Default is saved_models/.
-  --seed SEED                           Seed to use during training. Default is 1234.
+  -h, --help                                      Show help message and exit.
+  --mode MODE                                     Whether to train, test or both. Options: ['train', 'test', 'train_test']. Default is 'train'.
+  --dataset DATASET                               Which dataset to use. Options: ['MIND', 'RTL_NR']. Default is 'MIND'.
+  --root_data_dir ROOT_DATA_DIR                   Root directory of the data. Default is './MIND'.
+  --train_dir TRAIN_DIR                           Directory within the root_data_dir where the training data is stored. Default is 'train'.
+  --dev_dir DEV_DIR                               Directory within the root_data_dir where the dev data is stored. Default is 'dev'.
+  --test_dir TEST_DIR                             Directory within the root_data_dir where the test data is stored. Default is 'test'.
+  --model_dir MODEL_DIR                           Directory where the model is saved and loaded from. Default is './model'.
+  --load_ckpt_name LOAD_CKPT_NAME                 Checkpoint to load during testing. Default is None (don\'t load any).
+  --save_dev_results SAVE_DEV_RESULTS             Boolean indicating whether to save the evaluation results (recommendations, user similarity and candidate diversity). Default is False.
+  --seed SEED                                     Seed to use during training. Default is 1234.
+  --epochs EPOCHS                                 Number of epochs to train for. Default is 10.
+  --optimizer OPTIMIZER                           Optimizer to use for training. Options: ['adam', 'adamw', 'sgd', 'sgd_momentum']. Default is 'adam'.
+  --lr LR                                         Learning rate to use during training. Default is 1e-4.
+  --batch_size BATCH_SIZE                         Batch size to use during training and testing. Default is 64.
+  --npratio NPRATIO                               Number of negatives to sample per positive training example. Default is 4.
+  --enable_gpu ENABLE_GPU                         Boolean indicating whether to use the GPU or not. Default is True.
+  --shuffle_buffer_size SHUFFLE_BUFFER_SIZE       Buffer size for shuffling the dataset. Default is 10000.
+  --num_workers NUM_WORKERS                       Number of workers for data loading. Default is 0.
+  --log_steps LOG_STEPS                           Number of steps before logging intermediate metrics. Default is 1000.
+  --patience PATIENCE                             Number of epochs without improvement in AUC before stopping. Default is 3.
+  --filter_num FILTER_NUM                         Number of word occurences to filter out. Default is 0 (no filtering).
+  --architecture ARCHITECTURE                     Which model architecture to use. Options: ['plm4newsrec', 'nrms', 'naml', 'lstur']. Default is 'plm4newsrec'.
+  --num_unfrozen_layers NUM_UNFROZEN_LAYERS       Number of last layers to keep unfrozen in the encoder model. Default is 2.
+  --num_words_title NUM_WORDS_TITLE               Maximum token length of the title. Default is 20.
+  --num_words_abstract NUM_WORDS_ABSTRACT         Maximum token length of the abstract. Default is 50.
+  --user_log_length USER_LOG_LENGTH               Maximum length of the user history. Default is 50.
+  --news_encoder_model NEWS_ENCODER_MODEL         Text encoder model for the news content (only used in plm4newsrec architecture). Options: ['bert', 'fastformer']. Default is 'fastformer'.
+  --news_dim NEWS_DIM                             Dimensionality of the news embeddings. Default is 64.
+  --news_query_vector_dim NEWS_QUERY_VECTOR_DIM   Dimensionality of the news query vector. Default is 200.
+  --user_query_vector_dim USER_QUERY_VECTOR_DIM   Dimensionality of the user query vector. Default is 200.
+  --num_attention_heads NUM_ATTENTION_HEADS       Number of attention heads. Default is 20.
+  --drop_rate DROP_RATE                           Dropout rate to use during training. Default is 0.2.
+  --do_lower_case DO_LOWER_CASE                   Boolean indicating whether to lower case the data when using NRMS or NAML. Default is True.
+  --diversify DIVERSIFY                           Boolean indicating whether to diversify the recommendations. Default is False.
+  --similarity_measure SIMILARITY_MEASURE         Similarity measure to use for diversification, only used when diversify=True. Options: ['cosine_similarity', 'euclidean_distance']. Default is 'cosine_similarity'.
+  --reranking_function RERANKING_FUNCTION         Reranking function to use for diversification, only used when diversify=True. Options: ['naive', 'bound', 'normalized']. Default is 'naive'.
+  --s_min S_MIN                                   Minimimum user similarity value, only used when reranking_function is either 'bound' or 'normalized'. Default is 0.0 (not used).
+  --s_max S_MAX                                   Maximum user similarity value, only used when reranking_function is either 'bound' or 'normalized'. Default is 0.0 (not used).
+  --d_min D_MIN                                   Minimimum candidate diversity value, only used when reranking_function is 'normalized'. Default is 0.0 (not used).
+  --d_max D_MAX                                   Maximum candidate diversity value, only used when reranking_function is 'normalized'. Default is 0.0 (not used).
+  --fixed_s FIXED_S                               Fixed user similarity weight. Default is 0.0 (weight is determined per user).
 ```
 
-The DPR models can be evaluated using the following command line arguments:
-
-```bash
-usage: evaluate_dpr.py [-h] [--model MODEL] [--load_dir LOAD_DIR] [--max_seq_length MAX_SEQ_LENGTH]
-                        [--embeddings_size EMBEDDINGS_SIZE] [--batch_size BATCH_SIZE] [--dont_embed_title]
-                        [--data_dir DATA_DIR] [--output_dir OUTPUT_DIR] [--seed SEED]
-
-optional arguments:
-  -h, --help                            Show help message and exit.
-  --model MODEL                         What encoder model to use. Options: ['bert', 'distilbert', 'electra', 'tinybert']. Default is 'bert'.
-  --load_dir LOAD_DIR                   Directory for loading the trained models. Default is saved_models/.
-  --max_seq_length MAX_SEQ_LENGTH       Maximum tokenized sequence length. Default is 256.
-  --embeddings_size EMBEDDINGS_SIZE     Size of the model embeddings. Default is 0 (standard model embeddings sizes).
-  --batch_size BATCH_SIZE               Batch size to use for encoding questions and passages. Default is 512.
-  --dont_embed_title                    Do not embed passage titles. Titles are embedded by default.
-  --data_dir DATA_DIR                   Directory where the data is stored. Default is data/downloads/data/retriever/.
-  --output_dir OUTPUT_DIR               Directory for saving the model evaluation metrics. Default is evaluation_outputs/.
-  --seed SEED                           Seed to use during training. Default is 1234.
-```
+For the baselines, the same set of parameters apply but not all are used. The default parameters will suffice here.
 
 ## Authors
 

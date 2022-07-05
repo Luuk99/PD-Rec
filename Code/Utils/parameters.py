@@ -76,7 +76,7 @@ def parse_args():
     parser.add_argument("--news_query_vector_dim", type=int, default=200,
                        help="Dimensionality of the news query vector. Default is 200.")
     parser.add_argument("--user_query_vector_dim", type=int, default=200,
-                       help="Dimensionality of the user query vector. ")
+                       help="Dimensionality of the user query vector. Default is 200.")
     parser.add_argument("--num_attention_heads", type=int, default=20,
                        help="Number of attention heads. Default is 20.")
     parser.add_argument("--drop_rate", type=float, default=0.2,
