@@ -131,3 +131,5 @@ For the baselines, the same set of parameters apply but not all are used. The de
 ## Acknowledgements
 
 - The re-split MIND dataset is taken from the original [MIND website](https://msnews.github.io/).
+- Much of the original training loop is adapted from the orignal [PLM4NewsRec Github](https://github.com/wuch15/PLM4NewsRec).
+- The NRMS and NAML models have been adapted from this [PyTorch news recommenders Github](https://github.com/yflyl613/NewsRecommendation).
