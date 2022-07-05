@@ -1,8 +1,17 @@
 import os
 import numpy as np
 import argparse
+import tempfile
+import urllib
+import zipfile
 from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertSelfOutput, BertIntermediate, BertOutput
+
+from Models.LSTUR.lstur_model import LSTURModel
+from Models.NAML.naml_model import NAMLModel
+from Models.NRMS.nrms_model import NRMSModel
+from Models.PLM4NewsRec.fastformer import FastformerModel
+from Models.PLM4NewsRec.plm4newsrec_model import PLM4NewsRecModel
 
 
 def initialize_tokenizer(args):
@@ -68,7 +77,7 @@ def initialize_model(args, word_dict, category_dict, subcategory_dict, user_id_d
       # Load the encoder model
       if args.news_encoder_model == 'fastformer':
         # Load the fastformer model
-        config = BertConfig.from_json_file('/dbfs/mnt/rtl-databricks-datascience/lkaandorp/fastformer.json')
+        config = BertConfig.from_json_file('./Models/PLM4NewsRec/fastformer.json')
         matrix_dir = download_matrix(args)
         embedding_matrix = load_matrix(matrix_dir, word_dict, 300)
         news_encoder = FastformerModel(config, word_dict, embedding_matrix)

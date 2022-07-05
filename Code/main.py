@@ -8,9 +8,11 @@ import os
 import torch.optim as optim
 import pandas as pd
 
-from utils import initialize_tokenizer, initialize_model
-from parameters import parse_args
-from dataloading import load_data
+from Utils.utils import initialize_tokenizer, initialize_model
+from Utils.parameters import parse_args
+from Dataloading.dataloading import load_data
+from Evaluation.metrics import *
+from Diversification.diversification import *
 
 
 def perform_training_epoch(model, optimizer, scaler, dataloader, args):
@@ -436,6 +438,12 @@ def main(args):
     Inputs:
         args - Parsed arguments
     """
+    
+    # Ignore NumPy deprecation warnings
+    np.warnings.filterwarnings('ignore', category=np.VisibleDeprecationWarning)
+    
+    # Create the model directory if it does not exist yet
+    os.makedirs(args.model_dir, exist_ok=True)
     
     if args.mode == 'train':
       # Train the model

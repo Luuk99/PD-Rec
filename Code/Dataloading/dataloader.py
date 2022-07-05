@@ -8,8 +8,8 @@ import numpy as np
 import torch
 from torch.utils.data import IterableDataset
 
-from streaming import StreamSampler, StreamSamplerTest
-import utils
+from Dataloading.streaming import StreamSampler, StreamSamplerTest
+import Utils.utils
 
 
 def news_sample(news, ratio):

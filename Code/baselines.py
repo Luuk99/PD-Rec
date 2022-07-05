@@ -1,12 +1,17 @@
 import time
 import datetime
-import numpy as npR
+import numpy as np
 import torch
 from sklearn.metrics import roc_auc_score
 from torch.cuda import amp
 import os
 import torch.optim as optim
 import pandas as pd
+
+from Utils.parameters import parse_args
+from Dataloading.dataloading import load_data
+from Evaluation.metrics import *
+from Diversification.diversification import *
 
 
 def order_random(labels, embeddings, news_ids):
@@ -115,7 +120,7 @@ def perform_baseline_epoch(data_dir, args, word_dict, category_dict, subcategory
     
     # Save the recommendataions, user similarity and candidate diversity if given
     rand_results_dict = {'entry_id': [], 'top10_recommendations': [], 'user_sim': [], 'top10_div': []}
-    div_results_dict = {'entry_id': [], 'top10_recommendations': [], 'user_sim': [], 'top10_div': [], 'candidate_diversity': []} # DEBUG
+    div_results_dict = {'entry_id': [], 'top10_recommendations': [], 'user_sim': [], 'top10_div': []}
     
     # Load the evaluation data
     dataloader, num_articles = load_data(data_dir, args, None, dataset=dataset,
@@ -123,7 +128,7 @@ def perform_baseline_epoch(data_dir, args, word_dict, category_dict, subcategory
                                          model=None, word_dict=word_dict, baseline=True)
     
     evaluation_time = time.time()
-    for cnt, (log_vec, log_mask, news_vec, news_bias, label, news_id, entry_id, log_st_embedding, candidate_st_embedding) in enumerate(dataloader): 
+    for cnt, (log_vec, log_mask, news_vec, news_bias, label, news_id, entry_id, log_st_embedding, candidate_st_embedding, user_id) in enumerate(dataloader):
       if label.mean() == 0 or label.mean() == 1:
         continue 
       
@@ -189,16 +194,14 @@ def perform_baseline_epoch(data_dir, args, word_dict, category_dict, subcategory
             
       # Save the results
       rand_results_dict['entry_id'].append(entry_id)
-      rand_results_dict['top10_recommendations'].append(rand_news_id[:10])
+      rand_results_dict['top10_recommendations'].append(' '.join(rand_news_id[:10]))
       rand_results_dict['user_sim'].append(user_similarity(args, log_vec, log_mask))
-      rand_results_dict['top10_div'].append(candidate_diversity(rand_news_vec[:10]))
+      rand_results_dict['top10_div'].append(rand_ild10)
 
       div_results_dict['entry_id'].append(entry_id)
-      div_results_dict['top10_recommendations'].append(div_news_id[:10])
+      div_results_dict['top10_recommendations'].append(' '.join(div_news_id[:10]))
       div_results_dict['user_sim'].append(user_similarity(args, log_vec, log_mask))
-      div_results_dict['top10_div'].append(candidate_diversity(div_news_vec[:10]))
-      #DEBUG
-      div_results_dict['candidate_diversity'].append(" ".join([str(x) for x in div_score]))
+      div_results_dict['top10_div'].append(div_ild10)
     
     # Calculate the metrics
     rand_AUC = np.array(rand_AUC).mean()
@@ -250,7 +253,7 @@ def test_baselines(args, data_dir):
     """
     
     # Load the training data
-    _, category_dict, subcategory_dict, word_dict = load_data(data_dir, args, None, dataset='train')
+    _, category_dict, subcategory_dict, word_dict, _ = load_data(data_dir, args, None, dataset='train')
     
     # Perform a test epoch
     print('Testing..')
@@ -288,4 +291,13 @@ def test_baselines(args, data_dir):
     
 if __name__ == "__main__":
     args = parse_args()
-    test_baselines(args=args, data_dir=temp_dir)
+    
+    # Ignore NumPy deprecation warnings
+    np.warnings.filterwarnings('ignore', category=np.VisibleDeprecationWarning)
+    
+    # Create the model directory if it does not exist yet
+    os.makedirs(args.model_dir, exist_ok=True)
+    
+    # Test the baselines
+    args.batch_size = 1
+    test_baselines(args=args, data_dir=args.root_data_dir)

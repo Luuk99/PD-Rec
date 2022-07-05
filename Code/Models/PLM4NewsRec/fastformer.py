@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-
+from transformers import BertConfig
+from transformers.models.bert.modeling_bert import BertSelfOutput, BertIntermediate, BertOutput
 
 class FastformerAttentionPooling(nn.Module):
     """
