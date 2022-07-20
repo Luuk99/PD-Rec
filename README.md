@@ -1,8 +1,8 @@
-# MasterThesis
+# PD-Rec
 
-Master thesis for the master Artificial Intelligence @ UvA (University of Amsterdam)
+This repository contains research on diversity in personalized news recommendation. We research the effect of personalized levels of diversity in personalized news recommendation. We use a novel re-ranking algorithm, called Personalized Diverse Recommendation (PD-Rec), to introduce diversity to state-of-the-art news recommenders.
 
-This repository contains research on diversity in personalized news recommendation. We research the effect of personalized levels of diversity in personalized news recommendation. We use a novel re-ranking algorithm to introduce diversity to state-of-the-art news recommenders.
+This work was done for the Master thesis for the master Artificial Intelligence @ UvA (University of Amsterdam)
 
 ## Content
 
